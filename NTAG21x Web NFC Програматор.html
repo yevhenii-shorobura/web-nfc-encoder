@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NTAG21x Web NFC Studio — Програматор NFC-карток</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #090d16;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.6);
+        }
+        .pulse-ring {
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+            70% { transform: scale(1); box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="min-h-screen pb-12 selection:bg-blue-500 selection:text-white">
+
+    <!-- Top Header & Hardware Status -->
+    <header class="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">NTAG21x Web NFC Studio</h1>
+                        <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">ISO 14443-A</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Програматор карток «Review Us on Google» (NTAG213 / 215 / 216)</p>
+                </div>
+            </div>
+
+            <!-- Web NFC Status & Simulation Switch -->
+            <div class="flex items-center gap-2 sm:gap-3 ml-auto">
+                <div id="nfcSupportBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border">
+                    <span id="nfcStatusDot" class="w-2 h-2 rounded-full"></span>
+                    <span id="nfcStatusText">Перевірка Web NFC...</span>
+                </div>
+
+                <button id="simToggleBtn" onclick="toggleSimMode()" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition flex items-center gap-1.5" title="Дозволяє емулювати зчитування та запис без фізичного NFC-модуля">
+                    <span id="simDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span>Симулятор</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-5xl mx-auto px-4 pt-5 space-y-6">
+
+        <!-- Alert / HTTPS Warning Banner if Web NFC is missing -->
+        <div id="compatBanner" class="hidden rounded-xl border border-amber-500/30 bg-amber-950/30 p-3.5 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+                <div class="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <span>Прямий доступ до NFC-антени недоступний у цьому середовищі</span>
+                </div>
+                <p class="text-amber-200/80 leading-relaxed">
+                    Для реального запису картки відкрийте цей файл у <strong>Google Chrome на Android</strong> через HTTPS або <code>localhost</code> (і вимкніть iframe-пісочницю). Зараз автоматично увімкнено <strong>Режим симуляції та інспектора пам'яті</strong> — ви можете формувати дампи, перевіряти розмір у байтах або протестувати віртуальну картку.
+                </p>
+            </div>
+            <button onclick="downloadSelfHtml()" class="shrink-0 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold transition flex items-center gap-1.5 self-start sm:self-center">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                <span>Завантажити .HTML</span>
+            </button>
+        </div>
+
+        <!-- Top Grid: Scanner / Tag Info + Builder -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- LEFT COLUMN: Scanner & Tag Inspector (5 cols) -->
+            <section class="lg:col-span-5 space-y-5">
+                <div class="glass-card rounded-2xl p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+                                1. Діагностика NFC-картки
+                            </h2>
+                            <p class="text-xs text-slate-400">Зчитування UID, NDEF-записів та перевірка захисту</p>
+                        </div>
+                        <span id="scanStateBadge" class="text-[11px] font-mono px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700">Очікування</span>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button id="btnStartScan" onclick="startNfcScan()" class="col-span-2 sm:col-span-1 py-3 px-4 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                            </svg>
+                            <span id="btnScanLabel">Сканувати картку</span>
+                        </button>
+
+                        <button onclick="simulateGoogleReviewCard()" class="col-span-2 sm:col-span-1 py-3 px-3 rounded-xl font-medium text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-1.5">
+                            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Емулювати Google Card</span>
+                        </button>
+                    </div>
+
+                    <!-- Scanned Card Specs Box -->
+                    <div class="rounded-xl bg-slate-900/90 border border-slate-800 p-3.5 space-y-3">
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                                <span class="text-slate-500 block text-[11px]">UID (7-байтний серійний №)</span>
+                                <span id="tagUidDisplay" class="font-mono font-semibold text-slate-200 mt-0.5 block truncate">— : — : — : —</span>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                                <span class="text-slate-500 block text-[11px]">Ймовірний чип / Стандарт</span>
+                                <span id="tagChipDisplay" class="font-mono font-semibold text-blue-400 mt-0.5 block truncate">NTAG213 / 215 (Type 2)</span>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                                <span class="text-slate-500 block text-[11px]">Кількість NDEF записів</span>
+                                <span id="tagRecCountDisplay" class="font-mono font-semibold text-slate-200 mt-0.5 block">0 записів</span>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80">
+                                <span class="text-slate-500 block text-[11px]">Статус перезапису</span>
+                                <span id="tagWritableDisplay" class="font-mono font-semibold text-slate-400 mt-0.5 block">Не перевірено</span>
+                            </div>
+                        </div>
+
+                        <!-- Current Decoded NDEF Records -->
+                        <div class="space-y-1.5">
+                            <div class="flex items-center justify-between text-[11px] text-slate-400">
+                                <span>Зчитаний вміст картки (NDEF Message):</span>
+                                <button onclick="copyScannedContentToEditor()" id="btnCopyToEditor" class="hidden text-blue-400 hover:text-blue-300 underline">Вставити в редактор</button>
+                            </div>
+                            <div id="scannedRecordsList" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                <div class="text-xs text-slate-500 italic py-4 text-center border border-dashed border-slate-800 rounded-lg">
+                                    Піднесіть картку «Review Us on Google» до задньої панелі смартфона або натисніть «Емулювати Google Card»
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password / Lock Info Accordion -->
+                    <details class="group rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs">
+                        <summary class="cursor-pointer list-none p-3 font-medium text-slate-300 flex items-center justify-between">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                                Що робити, якщо картка захищена паролем?
+                            </span>
+                            <span class="text-slate-500 group-open:rotate-180 transition">▼</span>
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 text-slate-400 space-y-1.5 border-t border-slate-800/60 leading-relaxed">
+                            <p>• Якщо при спробі запису виникає <code class="text-rose-400">NotAllowedError</code>, на чипі активовано біт <code class="text-amber-300">AUTH0</code> (сторінка <code class="text-slate-200">0x29</code> для NTAG213 або <code class="text-slate-200">0x83</code> для NTAG215) або спалені Lock Bits.</p>
+                            <p>• Стандартні заводські паролі китайських Google-карток (`PWD` 4 байти): <code class="text-emerald-300">FF FF FF FF</code>, <code class="text-emerald-300">00 00 00 00</code>, <code class="text-emerald-300">12 34 56 78</code> або <code class="text-emerald-300">55 55 55 55</code>.</p>
+                            <p>• Зняти пароль можна у додатку <strong>NFC Tools → Інше → Видалити пароль</strong> або <strong>NXP TagWriter</strong> перед записом тут.</p>
+                        </div>
+                    </details>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: Payload Builder & Writer (7 cols) -->
+            <section class="lg:col-span-7 space-y-5">
+                <div class="glass-card rounded-2xl p-5 space-y-5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                2. Конструктор даних для прошивки чипа
+                            </h2>
+                            <p class="text-xs text-slate-400">Оберіть тип даних — NDEF-пакет та HEX-дамп оновлюються миттєво</p>
+                        </div>
+
+                        <!-- Target Chip Memory Selector -->
+                        <div class="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                            <button onclick="setTargetChip('NTAG213', 144)" id="chipBtn213" class="px-2.5 py-1 rounded-md font-mono font-medium bg-blue-600 text-white transition">NTAG213 (144B)</button>
+                            <button onclick="setTargetChip('NTAG215', 504)" id="chipBtn215" class="px-2.5 py-1 rounded-md font-mono font-medium text-slate-400 hover:text-white transition">NTAG215 (504B)</button>
+                            <button onclick="setTargetChip('NTAG216', 888)" id="chipBtn216" class="px-2.5 py-1 rounded-md font-mono font-medium text-slate-400 hover:text-white transition">NTAG216 (888B)</button>
+                        </div>
+                    </div>
+
+                    <!-- Mode Tabs -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800">
+                        <button onclick="switchMode('url')" id="tab-url" class="py-2 px-3 rounded-lg text-xs font-semibold transition bg-blue-600 text-white shadow">
+                            🔗 URL / Deep Link
+                        </button>
+                        <button onclick="switchMode('vcard')" id="tab-vcard" class="py-2 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">
+                            👤 Візитка (vCard)
+                        </button>
+                        <button onclick="switchMode('wifi')" id="tab-wifi" class="py-2 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">
+                            📶 Wi-Fi мережа
+                        </button>
+                        <button onclick="switchMode('raw')" id="tab-raw" class="py-2 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">
+                            🧩 Текст / JSON
+                        </button>
+                    </div>
+
+                    <!-- MODE 1: URL / DEEP LINK -->
+                    <div id="panel-url" class="space-y-3.5">
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="text-[11px] text-slate-400 self-center mr-1">Шаблони:</span>
+                            <button onclick="setUrlPreset('https://t.me/username')" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700">Telegram</button>
+                            <button onclick="setUrlPreset('https://www.instagram.com/username')" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-pink-300 border border-slate-700">Instagram</button>
+                            <button onclick="setUrlPreset('https://www.linkedin.com/in/username')" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">LinkedIn</button>
+                            <button onclick="setUrlPreset('https://g.page/r/Cd_example/review')" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700">Google Відгук</button>
+                            <button onclick="setUrlPreset('tel:+380991234567')" class="text-[11px] px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700">Дзвінок (tel:)</button>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1.5">Посилання або URI схема:</label>
+                            <input type="text" id="inputUrl" oninput="rebuildPayload()" value="https://t.me/ukraine_dev" placeholder="https://..." class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3.5 py-2.5 text-sm font-mono text-white">
+                        </div>
+
+                        <div id="uriPrefixHint" class="p-2.5 rounded-lg bg-blue-950/40 border border-blue-500/20 text-xs text-blue-300 flex items-center justify-between">
+                            <span>Стиснення префікса NDEF URI: <strong id="uriPrefixCode" class="font-mono">0x04 (https://)</strong></span>
+                            <span id="uriSavedBytes" class="font-mono text-emerald-400">Економія: 7 байтів</span>
+                        </div>
+                    </div>
+
+                    <!-- MODE 2: COMPACT VCARD (144B OPTIMIZED) -->
+                    <div id="panel-vcard" class="hidden space-y-3">
+                        <div class="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/20 text-[11px] text-emerald-300">
+                            ⚡ <strong>Оптимізація під 144 байти (NTAG213):</strong> зайві переноси та порожні поля автоматично видаляються, щоб візитка гарантовано помістилася на стандартну картку.
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Ім'я та Прізвище (FN)</label>
+                                <input type="text" id="vcName" oninput="rebuildPayload()" value="Олександр Коваленко" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Телефон (TEL)</label>
+                                <input type="text" id="vcPhone" oninput="rebuildPayload()" value="+380671234567" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Email (необов'язково)</label>
+                                <input type="email" id="vcEmail" oninput="rebuildPayload()" value="" placeholder="alex@domain.com" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Сайт / Telegram (URL)</label>
+                                <input type="text" id="vcUrl" oninput="rebuildPayload()" value="https://t.me/alex_kov" placeholder="https://t.me/..." class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs text-slate-300 mb-1">Компанія / Посада (ORG)</label>
+                                <input type="text" id="vcOrg" oninput="rebuildPayload()" value="" placeholder="Заповнюйте лише якщо вистачає байтів" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs text-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODE 3: WI-FI CREDENTIALS -->
+                    <div id="panel-wifi" class="hidden space-y-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Назва мережі (SSID)</label>
+                                <input type="text" id="wifiSsid" oninput="rebuildPayload()" value="Office_5G" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Пароль Wi-Fi</label>
+                                <input type="text" id="wifiPass" oninput="rebuildPayload()" value="Ukraine2026!" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Шифрування</label>
+                                <select id="wifiAuth" onchange="rebuildPayload()" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs text-white">
+                                    <option value="WPA2" selected>WPA2 / WPA3 Personal (Стандарт)</option>
+                                    <option value="OPEN">Відкрита мережа (Без пароля)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Формат запису Wi-Fi</label>
+                                <select id="wifiFormat" onchange="rebuildPayload()" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs text-white">
+                                    <option value="wsc" selected>Нативний WSC (application/vnd.wfa.wsc)</option>
+                                    <option value="uri">Універсальний WIFI:S:... (Текст/URI)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MODE 4: TEXT / JSON / CUSTOM MIME -->
+                    <div id="panel-raw" class="hidden space-y-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Тип NDEF-запису</label>
+                                <select id="rawRecordType" onchange="toggleRawMimeInput(); rebuildPayload();" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs text-white">
+                                    <option value="text" selected>Plain Text (UTF-8, мова 'uk')</option>
+                                    <option value="json">JSON (application/json)</option>
+                                    <option value="custom_mime">Кастомний MIME-тип</option>
+                                </select>
+                            </div>
+                            <div id="customMimeBox" class="hidden">
+                                <label class="block text-xs text-slate-300 mb-1">MIME-тип (ASCII)</label>
+                                <input type="text" id="rawMimeType" oninput="rebuildPayload()" value="application/x-nfc-key" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none px-3 py-2 text-xs font-mono text-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1">Дані для запису (Текст або JSON):</label>
+                            <textarea id="rawPayloadText" rows="3" oninput="rebuildPayload()" class="w-full rounded-xl bg-slate-950 border border-slate-700 focus:border-blue-500 focus:outline-none p-3 text-xs font-mono text-white">{"card_id": 4091, "access": "admin", "valid": true}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- REAL-TIME MEMORY METER -->
+                    <div class="rounded-xl bg-slate-950/90 border border-slate-800 p-4 space-y-2.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="font-semibold text-slate-200">Використання пам'яті NTAG:</span>
+                                <span id="memStatusPill" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                    Поміщається в NTAG213
+                                </span>
+                            </div>
+                            <div class="font-mono text-xs">
+                                <span id="totalBytesNum" class="font-bold text-white text-sm">24</span>
+                                <span class="text-slate-400"> / </span>
+                                <span id="maxBytesNum" class="text-slate-300">144</span>
+                                <span class="text-slate-500"> байтів (Сторінок: <span id="pagesUsedNum" class="text-blue-400">6</span>)</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="w-full h-3 rounded-full bg-slate-900 border border-slate-800 overflow-hidden relative">
+                            <div id="memProgressBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-200" style="width: 18%"></div>
+                        </div>
+
+                        <div class="flex justify-between text-[10px] font-mono text-slate-500">
+                            <span>0B (Page 0x04)</span>
+                            <span>144B (NTAG213 ліміт)</span>
+                            <span>504B (NTAG215)</span>
+                            <span>888B (NTAG216)</span>
+                        </div>
+                    </div>
+
+                    <!-- WRITE OPTIONS & MAIN FLASH BUTTON -->
+                    <div class="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        <label class="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer select-none">
+                            <input type="checkbox" id="chkOverwrite" checked class="w-4 h-4 rounded bg-slate-900 border-slate-700 text-blue-600 focus:ring-0">
+                            <span>Повністю перезаписати старі NDEF-записи (<code class="text-blue-400">overwrite: true</code>)</span>
+                        </label>
+
+                        <button id="btnWriteNfc" onclick="writeNfcTag()" class="py-3.5 px-6 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.99] text-white shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                            <span id="btnWriteLabel">Записати на NFC-чип</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- LOWER SECTION: Low-Level NTAG Page Map & HEX Dump Inspector -->
+        <section class="glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                        3. Низькорівнева карта пам'яті NTAG21x (TLV + NDEF по сторінках)
+                    </h2>
+                    <p class="text-xs text-slate-400">
+                        Точний розподіл по 4 байти на сторінку (починаючи з User Memory <code class="text-purple-300">Page 0x04</code>). Системні сторінки <code class="text-slate-400">0x00–0x03</code> захищені від перезапису.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="copyHexDump()" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        <span id="copyHexBtnText">Копіювати HEX</span>
+                    </button>
+                    <button onclick="copyFastWriteApdu()" class="px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5" title="Команди A2 [Page] [4 байти] для NFC Tools / ACR122U / PN532">
+                        <span id="copyApduBtnText">Копіювати APDU (A2h)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Legend for Byte Colors -->
+            <div class="flex flex-wrap gap-3 text-[11px] font-mono bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80">
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-400"></span> TLV Заголовок (03 + Len)</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500/40 border border-blue-400"></span> NDEF Заголовок + Тип</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/30 border border-emerald-400"></span> Корисні дані (Payload)</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-rose-500/40 border border-rose-400"></span> Термінатор (FE)</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-slate-800 border border-slate-600"></span> Нульовий паддінг (00)</span>
+            </div>
+
+            <!-- Page Table -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/90 max-h-72">
+                <table class="w-full text-left border-collapse text-xs font-mono">
+                    <thead class="bg-slate-900/90 text-slate-400 sticky top-0 z-10 border-b border-slate-800">
+                        <tr>
+                            <th class="py-2 px-3">Сторінка</th>
+                            <th class="py-2 px-3">Зміщення</th>
+                            <th class="py-2 px-3">HEX (4 байти)</th>
+                            <th class="py-2 px-3">ASCII</th>
+                            <th class="py-2 px-3">Призначення блоку пам'яті</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hexPageTableBody" class="divide-y divide-slate-800/60">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TERMINAL LOG CONSOLE -->
+        <section class="glass-card rounded-2xl p-4 space-y-2.5">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <h3 class="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">Журнал операцій Web NFC & Протоколу</h3>
+                </div>
+                <button onclick="clearConsoleLog()" class="text-[11px] text-slate-400 hover:text-white font-mono">Очистити лог</button>
+            </div>
+            <div id="consoleOutput" class="bg-slate-950 rounded-xl border border-slate-800/90 p-3 font-mono text-xs h-40 overflow-y-auto space-y-1.5"></div>
+        </section>
+
+    </main>
+
+    <!-- Waiting for NFC Tap Modal -->
+    <div id="nfcModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-card rounded-2xl max-w-sm w-full p-6 text-center space-y-4 border border-blue-500/30 shadow-2xl">
+            <div class="w-16 h-16 rounded-full bg-blue-600/20 border border-blue-500/40 flex items-center justify-center mx-auto pulse-ring">
+                <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+                </svg>
+            </div>
+            <h3 id="modalTitle" class="text-base font-bold text-white">Піднесіть NFC-картку</h3>
+            <p id="modalDesc" class="text-xs text-slate-300 leading-relaxed">
+                Прикладіть картку «Review Us on Google» впритул до NFC-антени смартфона і затримайте на 1–2 секунди.
+            </p>
+            <button onclick="cancelNfcOperation()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">
+                Скасувати
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // GLOBAL STATE & NDEF URI PREFIX TABLE (NFC Forum URI Record Type Definition)
+        // ============================================================================
+        const URI_PREFIXES = [
+            { code: 0x01, prefix: "http://www." },
+            { code: 0x02, prefix: "https://www." },
+            { code: 0x03, prefix: "http://" },
+            { code: 0x04, prefix: "https://" },
+            { code: 0x05, prefix: "tel:" },
+            { code: 0x06, prefix: "mailto:" },
+            { code: 0x1D, prefix: "file://" }
+        ];
+
+        let currentMode = 'url';
+        let targetChipName = 'NTAG213';
+        let targetChipLimit = 144; // Default to 144 bytes (strictest NTAG213 card)
+        let isSimMode = false;
+        let hasWebNfc = false;
+        let activeAbortController = null;
+        let currentTlvBytes = new Uint8Array(0);
+        let currentByteRoles = []; // Tracks role of each byte for color coding
+        let lastScannedTextOrUrl = '';
+
+        // ============================================================================
+        // INITIALIZATION & ENVIRONMENT CHECK
+        // ============================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            checkWebNfcSupport();
+            rebuildPayload();
+            logEvent('info', 'Система ініціалізована. Цільовий чип за замовчуванням: NTAG213 (144 байти користувацької пам\'яті, сторінки 0x04–0x27).');
+        });
+
+        function checkWebNfcSupport() {
+            const badge = document.getElementById('nfcSupportBadge');
+            const dot = document.getElementById('nfcStatusDot');
+            const text = document.getElementById('nfcStatusText');
+            const banner = document.getElementById('compatBanner');
+
+            if ('NDEFReader' in window && window.isSecureContext) {
+                hasWebNfc = true;
+                isSimMode = false;
+                badge.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+                dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+                text.textContent = "Web NFC Активний";
+                banner.classList.add('hidden');
+            } else {
+                hasWebNfc = false;
+                isSimMode = true;
+                badge.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-rose-500/40 bg-rose-500/10 text-rose-300";
+                dot.className = "w-2 h-2 rounded-full bg-rose-400";
+                text.textContent = "Web NFC Недоступний";
+                banner.classList.remove('hidden');
+            }
+            updateSimButtonUi();
+        }
+
+        function toggleSimMode() {
+            isSimMode = !isSimMode;
+            updateSimButtonUi();
+            logEvent('info', isSimMode
+                ? 'Увімкнено режим симуляції NFC-картки (безпечне тестування без апаратного NFC).'
+                : 'Режим симуляції вимкнено. Використовується фізичний Web NFC API.');
+        }
+
+        function updateSimButtonUi() {
+            const simDot = document.getElementById('simDot');
+            const simBtn = document.getElementById('simToggleBtn');
+            if (isSimMode) {
+                simDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+                simBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-400/60 bg-amber-500/20 text-amber-200 transition flex items-center gap-1.5";
+            } else {
+                simDot.className = "w-2 h-2 rounded-full bg-slate-500";
+                simBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 bg-slate-800/80 text-slate-400 hover:text-white transition flex items-center gap-1.5";
+            }
+        }
+
+        // ============================================================================
+        // LOGGING HELPER
+        // ============================================================================
+        function logEvent(type, message) {
+            const consoleEl = document.getElementById('consoleOutput');
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+            let badgeColor = 'text-blue-400';
+            let prefix = '[INFO]';
+            if (type === 'success') { badgeColor = 'text-emerald-400'; prefix = '[OK]'; }
+            if (type === 'warn')    { badgeColor = 'text-amber-400'; prefix = '[WARN]'; }
+            if (type === 'error')   { badgeColor = 'text-rose-400'; prefix = '[ERR]'; }
+            if (type === 'hex')     { badgeColor = 'text-purple-400'; prefix = '[HEX]'; }
+
+            const line = document.createElement('div');
+            line.className = "leading-relaxed break-all";
+            line.innerHTML = `<span class="text-slate-600">[${timeStr}]</span> <span class="${badgeColor} font-semibold">${prefix}</span> <span class="text-slate-300">${escapeHtml(message)}</span>`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function clearConsoleLog() {
+            document.getElementById('consoleOutput').innerHTML = '';
+            logEvent('info', 'Журнал очищено.');
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        // ============================================================================
+        // MODE & CHIP SWITCHING
+        // ============================================================================
+        function switchMode(mode) {
+            currentMode = mode;
+            const modes = ['url', 'vcard', 'wifi', 'raw'];
+            modes.forEach(m => {
+                const tab = document.getElementById(`tab-${m}`);
+                const panel = document.getElementById(`panel-${m}`);
+                if (m === mode) {
+                    tab.className = "py-2 px-3 rounded-lg text-xs font-semibold transition bg-blue-600 text-white shadow";
+                    panel.classList.remove('hidden');
+                } else {
+                    tab.className = "py-2 px-3 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200";
+                    panel.classList.add('hidden');
+                }
+            });
+            rebuildPayload();
+        }
+
+        function setTargetChip(name, limitBytes) {
+            targetChipName = name;
+            targetChipLimit = limitBytes;
+            const chips = [
+                { id: 'chipBtn213', name: 'NTAG213' },
+                { id: 'chipBtn215', name: 'NTAG215' },
+                { id: 'chipBtn216', name: 'NTAG216' }
+            ];
+            chips.forEach(c => {
+                const btn = document.getElementById(c.id);
+                if (c.name === name) {
+                    btn.className = "px-2.5 py-1 rounded-md font-mono font-medium bg-blue-600 text-white transition";
+                } else {
+                    btn.className = "px-2.5 py-1 rounded-md font-mono font-medium text-slate-400 hover:text-white transition";
+                }
+            });
+            rebuildPayload();
+        }
+
+        function setUrlPreset(url) {
+            document.getElementById('inputUrl').value = url;
+            rebuildPayload();
+        }
+
+        function toggleRawMimeInput() {
+            const type = document.getElementById('rawRecordType').value;
+            const box = document.getElementById('customMimeBox');
+            if (type === 'custom_mime') {
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+
+        // ============================================================================
+        // LOW-LEVEL NDEF + TLV COMPILER (EXACT NTAG21x MEMORY BUILDER)
+        // ============================================================================
+        function rebuildPayload() {
+            const encoder = new TextEncoder();
+            let ndefRecordBytes = [];
+            let ndefRoles = []; // 'ndef-hdr' or 'payload'
+
+            if (currentMode === 'url') {
+                const rawUrl = document.getElementById('inputUrl').value.trim();
+                let matchedCode = 0x00;
+                let strippedUrl = rawUrl;
+                let savedCount = 0;
+
+                for (const item of URI_PREFIXES) {
+                    if (rawUrl.toLowerCase().startsWith(item.prefix)) {
+                        matchedCode = item.code;
+                        strippedUrl = rawUrl.slice(item.prefix.length);
+                        savedCount = item.prefix.length - 1;
+                        break;
+                    }
+                }
+
+                // Update URI compression hint
+                const codeLabel = matchedCode === 0x00
+                    ? '0x00 (Без префікса)'
+                    : `0x0${matchedCode.toString(16).toUpperCase()} (${URI_PREFIXES.find(p => p.code === matchedCode).prefix})`;
+                document.getElementById('uriPrefixCode').textContent = codeLabel;
+                document.getElementById('uriSavedBytes').textContent = `Економія: ${Math.max(0, savedCount)} байтів`;
+
+                const uriBodyBytes = encoder.encode(strippedUrl);
+                const payloadLen = 1 + uriBodyBytes.length;
+
+                // NDEF Short Record Header: MB=1, ME=1, CF=0, SR=1, IL=0, TNF=0x01 (Well-Known) -> 0xD1
+                // Type Length = 0x01, Payload Length = payloadLen, Type = 0x55 ('U')
+                const hdr = [0xD1, 0x01, payloadLen & 0xFF, 0x55, matchedCode];
+                hdr.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                uriBodyBytes.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('payload'); });
+
+            } else if (currentMode === 'vcard') {
+                const name = document.getElementById('vcName').value.trim();
+                const phone = document.getElementById('vcPhone').value.trim();
+                const email = document.getElementById('vcEmail').value.trim();
+                const url = document.getElementById('vcUrl').value.trim();
+                const org = document.getElementById('vcOrg').value.trim();
+
+                // Ultra-compact vCard 3.0 optimized for 144B NTAG213
+                const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+                if (name)  lines.push(`FN:${name}`);
+                if (phone) lines.push(`TEL:${phone}`);
+                if (email) lines.push(`EMAIL:${email}`);
+                if (url)   lines.push(`URL:${url}`);
+                if (org)   lines.push(`ORG:${org}`);
+                lines.push('END:VCARD');
+                const vcardStr = lines.join('\n');
+
+                const mimeBytes = encoder.encode('text/vcard');
+                const payloadBytes = encoder.encode(vcardStr);
+
+                buildMimeNdef(mimeBytes, payloadBytes, ndefRecordBytes, ndefRoles);
+
+            } else if (currentMode === 'wifi') {
+                const ssid = document.getElementById('wifiSsid').value.trim();
+                const pass = document.getElementById('wifiPass').value;
+                const auth = document.getElementById('wifiAuth').value;
+                const format = document.getElementById('wifiFormat').value;
+
+                if (format === 'wsc') {
+                    // Build binary Wi-Fi Simple Configuration (application/vnd.wfa.wsc)
+                    const mimeBytes = encoder.encode('application/vnd.wfa.wsc');
+                    const payloadBytes = buildWscBinaryPayload(ssid, pass, auth);
+                    buildMimeNdef(mimeBytes, payloadBytes, ndefRecordBytes, ndefRoles);
+                } else {
+                    // Compact URI / Text WIFI:S:...;;
+                    const tVal = auth === 'OPEN' ? 'nopass' : 'WPA';
+                    const wifiStr = `WIFI:S:${ssid};T:${tVal};P:${auth === 'OPEN' ? '' : pass};;`;
+                    const strBytes = encoder.encode(wifiStr);
+                    const langBytes = encoder.encode('en');
+                    const payloadLen = 1 + langBytes.length + strBytes.length;
+
+                    const hdr = [0xD1, 0x01, payloadLen & 0xFF, 0x54, langBytes.length];
+                    hdr.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                    langBytes.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                    strBytes.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('payload'); });
+                }
+
+            } else if (currentMode === 'raw') {
+                const recType = document.getElementById('rawRecordType').value;
+                const textVal = document.getElementById('rawPayloadText').value;
+                const payloadBytes = encoder.encode(textVal);
+
+                if (recType === 'text') {
+                    const langBytes = encoder.encode('uk');
+                    const payloadLen = 1 + langBytes.length + payloadBytes.length;
+                    if (payloadLen <= 255) {
+                        const hdr = [0xD1, 0x01, payloadLen, 0x54, langBytes.length];
+                        hdr.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                    } else {
+                        // Normal Record (SR=0 -> 0xC1)
+                        const hdr = [
+                            0xC1, 0x01,
+                            (payloadLen >>> 24) & 0xFF, (payloadLen >>> 16) & 0xFF,
+                            (payloadLen >>> 8) & 0xFF, payloadLen & 0xFF,
+                            0x54, langBytes.length
+                        ];
+                        hdr.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                    }
+                    langBytes.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('ndef-hdr'); });
+                    payloadBytes.forEach(b => { ndefRecordBytes.push(b); ndefRoles.push('payload'); });
+                } else {
+                    const mimeStr = recType === 'json'
+                        ? 'application/json'
+                        : (document.getElementById('rawMimeType').value.trim() || 'application/octet-stream');
+                    const mimeBytes = encoder.encode(mimeStr);
+                    buildMimeNdef(mimeBytes, payloadBytes, ndefRecordBytes, ndefRoles);
+                }
+            }
+
+            // Wrap NDEF inside Type 2 Tag TLV Block: 0x03 (NDEF Message TLV) + Length + NDEF + 0xFE (Terminator TLV)
+            const tlvBytes = [];
+            const tlvRoles = [];
+            tlvBytes.push(0x03);
+            tlvRoles.push('tlv');
+
+            const ndefLen = ndefRecordBytes.length;
+            if (ndefLen < 0xFF) {
+                tlvBytes.push(ndefLen);
+                tlvRoles.push('tlv');
+            } else {
+                // 3-byte TLV length format: 0xFF + MSB + LSB
+                tlvBytes.push(0xFF, (ndefLen >>> 8) & 0xFF, ndefLen & 0xFF);
+                tlvRoles.push('tlv', 'tlv', 'tlv');
+            }
+
+            for (let i = 0; i < ndefRecordBytes.length; i++) {
+                tlvBytes.push(ndefRecordBytes[i]);
+                tlvRoles.push(ndefRoles[i]);
+            }
+
+            tlvBytes.push(0xFE);
+            tlvRoles.push('term');
+
+            currentTlvBytes = new Uint8Array(tlvBytes);
+            currentByteRoles = tlvRoles;
+
+            updateMemoryMeter(currentTlvBytes.length);
+            renderPageMapTable(currentTlvBytes, currentByteRoles);
+        }
+
+        function buildMimeNdef(mimeBytes, payloadBytes, outBytes, outRoles) {
+            const pLen = payloadBytes.length;
+            if (pLen <= 255) {
+                // TNF = 0x02 (Media-type RFC 2046), SR = 1 -> 0xD2
+                outBytes.push(0xD2, mimeBytes.length, pLen);
+                outRoles.push('ndef-hdr', 'ndef-hdr', 'ndef-hdr');
+            } else {
+                // SR = 0 -> 0xC2
+                outBytes.push(
+                    0xC2, mimeBytes.length,
+                    (pLen >>> 24) & 0xFF, (pLen >>> 16) & 0xFF,
+                    (pLen >>> 8) & 0xFF, pLen & 0xFF
+                );
+                outRoles.push('ndef-hdr', 'ndef-hdr', 'ndef-hdr', 'ndef-hdr', 'ndef-hdr', 'ndef-hdr');
+            }
+            mimeBytes.forEach(b => { outBytes.push(b); outRoles.push('ndef-hdr'); });
+            payloadBytes.forEach(b => { outBytes.push(b); outRoles.push('payload'); });
+        }
+
+        // Wi-Fi Simple Configuration (WSC) binary TLV generator for native Android/iOS tap-to-connect
+        function buildWscBinaryPayload(ssid, password, authMode) {
+            const encoder = new TextEncoder();
+            const ssidBytes = encoder.encode(ssid);
+            const passBytes = encoder.encode(authMode === 'OPEN' ? '' : password);
+
+            function tlv16(tag, valBytes) {
+                const len = valBytes.length;
+                return [
+                    (tag >>> 8) & 0xFF, tag & 0xFF,
+                    (len >>> 8) & 0xFF, len & 0xFF,
+                    ...valBytes
+                ];
+            }
+
+            const netIdx = tlv16(0x1026, [0x01]);
+            const ssidTlv = tlv16(0x1045, ssidBytes);
+            const authType = tlv16(0x1003, authMode === 'OPEN' ? [0x00, 0x01] : [0x00, 0x20]); // 0x0020 = WPA2-PSK
+            const encType = tlv16(0x100F, authMode === 'OPEN' ? [0x00, 0x01] : [0x00, 0x08]);  // 0x0008 = AES
+            const netKey = tlv16(0x1027, passBytes);
+            const macAddr = tlv16(0x1020, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+            const credInner = [...netIdx, ...ssidTlv, ...authType, ...encType, ...netKey, ...macAddr];
+            return new Uint8Array(tlv16(0x100E, credInner));
+        }
+
+        // ============================================================================
+        // MEMORY BAR & NTAG PAGE DUMP RENDERER
+        // ============================================================================
+        function updateMemoryMeter(byteCount) {
+            const pagesUsed = Math.ceil(byteCount / 4);
+            document.getElementById('totalBytesNum').textContent = byteCount;
+            document.getElementById('maxBytesNum').textContent = targetChipLimit;
+            document.getElementById('pagesUsedNum').textContent = pagesUsed;
+
+            const pill = document.getElementById('memStatusPill');
+            const bar = document.getElementById('memProgressBar');
+            const pct = Math.min(100, Math.round((byteCount / targetChipLimit) * 100));
+            bar.style.width = `${pct}%`;
+
+            if (byteCount <= 144) {
+                pill.textContent = "✓ Поміщається в NTAG213 / 215 / 216";
+                pill.className = "px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
+                bar.className = "h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-200";
+            } else if (byteCount <= 504) {
+                pill.textContent = "⚠ Завеликий для NTAG213! Потрібен NTAG215/216";
+                pill.className = "px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30";
+                bar.className = "h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-200";
+            } else if (byteCount <= 888) {
+                pill.textContent = "⚠ Поміщається лише в NTAG216 (до 888B)";
+                pill.className = "px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-orange-500/15 text-orange-300 border border-orange-500/30";
+                bar.className = "h-full bg-gradient-to-r from-orange-500 to-red-400 transition-all duration-200";
+            } else {
+                pill.textContent = "✕ Перевищено ліміт пам'яті NTAG!";
+                pill.className = "px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40";
+                bar.className = "h-full bg-rose-600 transition-all duration-200";
+            }
+        }
+
+        function renderPageMapTable(bytes, roles) {
+            const tbody = document.getElementById('hexPageTableBody');
+            tbody.innerHTML = '';
+
+            // Add static reference row for Page 0x03 (Capability Container)
+            const ccByte2 = targetChipName === 'NTAG213' ? '12' : (targetChipName === 'NTAG215' ? '3E' : '6D');
+            const ccRow = document.createElement('tr');
+            ccRow.className = "bg-slate-900/50 text-slate-500";
+            ccRow.innerHTML = `
+                <td class="py-1.5 px-3 font-semibold">Page 0x03</td>
+                <td class="py-1.5 px-3">+000</td>
+                <td class="py-1.5 px-3"><span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">E1 10 ${ccByte2} 00</span></td>
+                <td class="py-1.5 px-3">....</td>
+                <td class="py-1.5 px-3 text-[11px]">Capability Container (CC — системний, не перезаписується)</td>
+            `;
+            tbody.appendChild(ccRow);
+
+            const totalPages = Math.max(1, Math.ceil(bytes.length / 4));
+            for (let p = 0; p < totalPages; p++) {
+                const pageAddr = 0x04 + p;
+                const pageHexAddr = '0x' + pageAddr.toString(16).toUpperCase().padStart(2, '0');
+                const offsetStr = '+' + String(p * 4).padStart(3, '0');
+
+                let hexSpans = [];
+                let asciiChars = '';
+                let roleSet = new Set();
+
+                for (let b = 0; b < 4; b++) {
+                    const idx = p * 4 + b;
+                    if (idx < bytes.length) {
+                        const val = bytes[idx];
+                        const role = roles[idx];
+                        roleSet.add(role);
+                        const hexByte = val.toString(16).toUpperCase().padStart(2, '0');
+
+                        let badgeCls = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+                        if (role === 'tlv')      badgeCls = "bg-amber-500/25 text-amber-300 border-amber-500/40";
+                        if (role === 'ndef-hdr') badgeCls = "bg-blue-500/25 text-blue-300 border-blue-500/40";
+                        if (role === 'term')     badgeCls = "bg-rose-500/25 text-rose-300 border-rose-500/40";
+
+                        hexSpans.push(`<span class="inline-block px-1.5 py-0.5 rounded border ${badgeCls}">${hexByte}</span>`);
+                        asciiChars += (val >= 32 && val <= 126) ? escapeHtml(String.fromCharCode(val)) : '·';
+                    } else {
+                        hexSpans.push(`<span class="inline-block px-1.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-600">00</span>`);
+                        asciiChars += '·';
+                    }
+                }
+
+                let desc = 'Корисні дані NDEF (Payload)';
+                if (p === 0) desc = 'Початок User Memory: TLV (03) + NDEF Заголовок';
+                else if (roleSet.has('term')) desc = 'Кінець NDEF + Термінатор TLV (FE)';
+                else if (roleSet.has('ndef-hdr') && !roleSet.has('payload')) desc = 'Заголовок / MIME-тип NDEF';
+
+                const isOver213 = pageAddr > 0x27;
+                const tr = document.createElement('tr');
+                tr.className = isOver213 ? "bg-amber-950/15 hover:bg-slate-900/60" : "hover:bg-slate-900/60";
+                tr.innerHTML = `
+                    <td class="py-1.5 px-3 font-semibold ${isOver213 ? 'text-amber-400' : 'text-purple-300'}">Page ${pageHexAddr} <span class="text-slate-600">(${pageAddr})</span></td>
+                    <td class="py-1.5 px-3 text-slate-500">${offsetStr}</td>
+                    <td class="py-1.5 px-3 space-x-1 whitespace-nowrap">${hexSpans.join('')}</td>
+                    <td class="py-1.5 px-3 text-slate-300 tracking-widest">${asciiChars}</td>
+                    <td class="py-1.5 px-3 text-[11px] text-slate-400">${desc} ${isOver213 ? '<span class="text-amber-400">(>NTAG213)</span>' : ''}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+        }
+
+        // ============================================================================
+        // COPY HELPERS (HEX DUMP / APDU / SELF HTML)
+        // ============================================================================
+        function copyToClipboardSafe(text, btnSpanId, successLabel) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                if (btnSpanId) {
+                    const span = document.getElementById(btnSpanId);
+                    const orig = span.textContent;
+                    span.textContent = successLabel;
+                    setTimeout(() => { span.textContent = orig; }, 1800);
+                }
+            } catch (err) {
+                logEvent('error', 'Помилка копіювання в буфер обміну.');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function copyHexDump() {
+            const totalPages = Math.ceil(currentTlvBytes.length / 4);
+            const padded = new Uint8Array(totalPages * 4);
+            padded.set(currentTlvBytes);
+            const hexArr = Array.from(padded).map(b => b.toString(16).toUpperCase().padStart(2, '0'));
+            const lines = [];
+            for (let p = 0; p < totalPages; p++) {
+                const pageHex = (0x04 + p).toString(16).toUpperCase().padStart(2, '0');
+                lines.push(`Page 0x${pageHex}: ${hexArr.slice(p * 4, p * 4 + 4).join(' ')}`);
+            }
+            copyToClipboardSafe(lines.join('\n'), 'copyHexBtnText', '✓ Скопійовано!');
+            logEvent('hex', `Скопійовано HEX-дамп (${totalPages} сторінок, ${currentTlvBytes.length} байтів).`);
+        }
+
+        function copyFastWriteApdu() {
+            const totalPages = Math.ceil(currentTlvBytes.length / 4);
+            const padded = new Uint8Array(totalPages * 4);
+            padded.set(currentTlvBytes);
+            const cmds = [];
+            for (let p = 0; p < totalPages; p++) {
+                const pageHex = (0x04 + p).toString(16).toUpperCase().padStart(2, '0');
+                const b0 = padded[p * 4].toString(16).toUpperCase().padStart(2, '0');
+                const b1 = padded[p * 4 + 1].toString(16).toUpperCase().padStart(2, '0');
+                const b2 = padded[p * 4 + 2].toString(16).toUpperCase().padStart(2, '0');
+                const b3 = padded[p * 4 + 3].toString(16).toUpperCase().padStart(2, '0');
+                cmds.push(`A2:${pageHex}:${b0}:${b1}:${b2}:${b3}`);
+            }
+            copyToClipboardSafe(cmds.join(', '), 'copyApduBtnText', '✓ APDU скопійовано!');
+            logEvent('hex', `Згенеровано ${cmds.length} команд WRITE (A2h) для прямого запису сторінок у NFC Tools.`);
+        }
+
+        function downloadSelfHtml() {
+            const htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ntag21x-nfc-programmer.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            logEvent('success', 'Файл ntag21x-nfc-programmer.html збережено.');
+        }
+
+        // ============================================================================
+        // WEB NFC SCANNER & SIMULATOR
+        // ============================================================================
+        async function startNfcScan() {
+            if (isSimMode || !hasWebNfc) {
+                simulateGoogleReviewCard();
+                return;
+            }
+
+            try {
+                if (activeAbortController) activeAbortController.abort();
+                activeAbortController = new AbortController();
+
+                const ndef = new NDEFReader();
+                await ndef.scan({ signal: activeAbortController.signal });
+
+                showNfcModal('Режим сканування активний', 'Піднесіть NFC-картку «Review Us on Google» до задньої кришки смартфона...');
+                setScanBadge('Сканування...', 'blue');
+                logEvent('info', 'NDEFReader.scan() запущено. Очікування NFC-мітки...');
+
+                ndef.onreadingerror = () => {
+                    hideNfcModal();
+                    setScanBadge('Помилка читання', 'rose');
+                    logEvent('error', 'Не вдалося прочитати NFC-картку. Можливо, чип пошкоджений або не відформатований у NDEF.');
+                };
+
+                ndef.onreading = (event) => {
+                    hideNfcModal();
+                    handleScannedTag(event.serialNumber, event.message.records, false);
+                };
+
+            } catch (err) {
+                hideNfcModal();
+                setScanBadge('Відмова доступу', 'rose');
+                logEvent('error', `Помилка запуску сканера: ${err.name} — ${err.message}`);
+            }
+        }
+
+        function simulateGoogleReviewCard() {
+            const fakeUid = "04:A8:7C:92:E1:6B:80";
+            const fakeGoogleUrl = "https://search.google.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4";
+            const encoder = new TextEncoder();
+
+            const simulatedRecords = [
+                {
+                    recordType: "url",
+                    mediaType: null,
+                    id: "",
+                    data: new DataView(encoder.encode(fakeGoogleUrl).buffer),
+                    _decodedStr: fakeGoogleUrl
+                }
+            ];
+
+            handleScannedTag(fakeUid, simulatedRecords, true);
+        }
+
+        function handleScannedTag(serialNumber, records, isSimulated) {
+            const uidStr = serialNumber ? serialNumber.toUpperCase() : "НЕВІДОМИЙ UID";
+            document.getElementById('tagUidDisplay').textContent = uidStr;
+
+            // Estimate NXP NTAG if UID starts with 04 (NXP manufacturer byte 0x04) and is 7 bytes
+            const cleanHex = uidStr.replace(/[^0-9A-F]/g, '');
+            if (cleanHex.startsWith('04') && cleanHex.length === 14) {
+                document.getElementById('tagChipDisplay').textContent = "NXP NTAG213/215 (04h)";
+            } else {
+                document.getElementById('tagChipDisplay').textContent = "ISO 14443-A Type 2";
+            }
+
+            document.getElementById('tagRecCountDisplay').textContent = `${records.length} запис(ів)`;
+            document.getElementById('tagWritableDisplay').textContent = "Доступна для NDEF";
+            document.getElementById('tagWritableDisplay').className = "font-mono font-semibold text-emerald-400 mt-0.5 block";
+
+            setScanBadge(isSimulated ? 'Емуляція OK' : 'Зчитано!', 'emerald');
+            logEvent('success', `${isSimulated ? '[СИМУЛЯТОР] ' : ''}Зчитано NFC-картку! UID: ${uidStr}, записів: ${records.length}`);
+
+            const listEl = document.getElementById('scannedRecordsList');
+            listEl.innerHTML = '';
+            lastScannedTextOrUrl = '';
+
+            if (!records || records.length === 0) {
+                listEl.innerHTML = `<div class="text-xs text-slate-400 p-3 rounded-lg bg-slate-950 border border-slate-800">Картка порожня (0 NDEF записів). Готова до запису.</div>`;
+                document.getElementById('btnCopyToEditor').classList.add('hidden');
+                return;
+            }
+
+            const decoder = new TextDecoder();
+            records.forEach((rec, idx) => {
+                let decodedText = rec._decodedStr || '';
+                if (!decodedText && rec.data) {
+                    try {
+                        decodedText = decoder.decode(rec.data);
+                    } catch (e) {
+                        decodedText = '[Бінарні дані]';
+                    }
+                }
+                if (idx === 0) lastScannedTextOrUrl = decodedText;
+
+                const card = document.createElement('div');
+                card.className = "p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs space-y-1";
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                            #${idx + 1} • ${escapeHtml(rec.recordType.toUpperCase())}${rec.mediaType ? ' (' + escapeHtml(rec.mediaType) + ')' : ''}
+                        </span>
+                        <span class="font-mono text-[11px] text-slate-500">${decodedText.length} симв.</span>
+                    </div>
+                    <div class="font-mono text-slate-200 break-all pt-0.5">${escapeHtml(decodedText)}</div>
+                `;
+                listEl.appendChild(card);
+                logEvent('info', `Запис #${idx + 1} [${rec.recordType}]: ${decodedText}`);
+            });
+
+            if (lastScannedTextOrUrl) {
+                document.getElementById('btnCopyToEditor').classList.remove('hidden');
+            }
+        }
+
+        function copyScannedContentToEditor() {
+            if (!lastScannedTextOrUrl) return;
+            switchMode('url');
+            document.getElementById('inputUrl').value = lastScannedTextOrUrl;
+            rebuildPayload();
+            logEvent('info', 'Зчитане посилання перенесено у конструктор для редагування.');
+        }
+
+        // ============================================================================
+        // WEB NFC WRITER (REPROGRAMMING THE CHIP)
+        // ============================================================================
+        function buildWebNfcMessageObject() {
+            const encoder = new TextEncoder();
+
+            if (currentMode === 'url') {
+                const url = document.getElementById('inputUrl').value.trim();
+                return { records: [{ recordType: "url", data: url }] };
+            }
+
+            if (currentMode === 'vcard') {
+                const name = document.getElementById('vcName').value.trim();
+                const phone = document.getElementById('vcPhone').value.trim();
+                const email = document.getElementById('vcEmail').value.trim();
+                const url = document.getElementById('vcUrl').value.trim();
+                const org = document.getElementById('vcOrg').value.trim();
+                const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+                if (name)  lines.push(`FN:${name}`);
+                if (phone) lines.push(`TEL:${phone}`);
+                if (email) lines.push(`EMAIL:${email}`);
+                if (url)   lines.push(`URL:${url}`);
+                if (org)   lines.push(`ORG:${org}`);
+                lines.push('END:VCARD');
+                const vcardPayload = encoder.encode(lines.join('\n'));
+                return {
+                    records: [{
+                        recordType: "mime",
+                        mediaType: "text/vcard",
+                        data: vcardPayload
+                    }]
+                };
+            }
+
+            if (currentMode === 'wifi') {
+                const ssid = document.getElementById('wifiSsid').value.trim();
+                const pass = document.getElementById('wifiPass').value;
+                const auth = document.getElementById('wifiAuth').value;
+                const format = document.getElementById('wifiFormat').value;
+
+                if (format === 'wsc') {
+                    const binPayload = buildWscBinaryPayload(ssid, pass, auth);
+                    return {
+                        records: [{
+                            recordType: "mime",
+                            mediaType: "application/vnd.wfa.wsc",
+                            data: binPayload
+                        }]
+                    };
+                } else {
+                    const tVal = auth === 'OPEN' ? 'nopass' : 'WPA';
+                    const wifiStr = `WIFI:S:${ssid};T:${tVal};P:${auth === 'OPEN' ? '' : pass};;`;
+                    return { records: [{ recordType: "text", data: wifiStr, lang: "en" }] };
+                }
+            }
+
+            // Raw / JSON / Custom MIME
+            const recType = document.getElementById('rawRecordType').value;
+            const textVal = document.getElementById('rawPayloadText').value;
+
+            if (recType === 'text') {
+                return { records: [{ recordType: "text", data: textVal, lang: "uk" }] };
+            }
+            const mimeStr = recType === 'json'
+                ? 'application/json'
+                : (document.getElementById('rawMimeType').value.trim() || 'application/octet-stream');
+
+            return {
+                records: [{
+                    recordType: "mime",
+                    mediaType: mimeStr,
+                    data: encoder.encode(textVal)
+                }]
+            };
+        }
+
+        async function writeNfcTag() {
+            if (currentTlvBytes.length > targetChipLimit) {
+                logEvent('warn', `Увага: розмір пакета (${currentTlvBytes.length}B) перевищує ліміт обраного чипа ${targetChipName} (${targetChipLimit}B)! Запис може завершитися помилкою.`);
+            }
+
+            const ndefMessage = buildWebNfcMessageObject();
+            const overwrite = document.getElementById('chkOverwrite').checked;
+
+            if (isSimMode || !hasWebNfc) {
+                showNfcModal('Симуляція прошивки чипа...', 'Запис сторінок пам\'яті Page 0x04..0x' + (0x04 + Math.ceil(currentTlvBytes.length / 4) - 1).toString(16).toUpperCase().padStart(2, '0'));
+                setTimeout(() => {
+                    hideNfcModal();
+                    const rec = ndefMessage.records[0];
+                    const decoder = new TextDecoder();
+                    const previewStr = typeof rec.data === 'string' ? rec.data : decoder.decode(rec.data);
+                    handleScannedTag("04:A8:7C:92:E1:6B:80", [{
+                        recordType: rec.recordType,
+                        mediaType: rec.mediaType || null,
+                        _decodedStr: previewStr
+                    }], true);
+                    logEvent('success', `[СИМУЛЯТОР] Картку успішно перепрограмовано! Записано ${currentTlvBytes.length} байтів (${Math.ceil(currentTlvBytes.length / 4)} сторінок NTAG).`);
+                }, 900);
+                return;
+            }
+
+            try {
+                if (activeAbortController) activeAbortController.abort();
+                activeAbortController = new AbortController();
+
+                showNfcModal('Готовий до перезапису чипа', 'Піднесіть NFC-картку і не відводьте її до завершення запису...');
+                logEvent('info', `Очікування картки для запису (${currentTlvBytes.length} байтів, overwrite=${overwrite})...`);
+
+                const ndef = new NDEFReader();
+                await ndef.write(ndefMessage, {
+                    overwrite: overwrite,
+                    signal: activeAbortController.signal
+                });
+
+                hideNfcModal();
+                setScanBadge('Записано!', 'emerald');
+                document.getElementById('tagWritableDisplay').textContent = "Успішно перезаписано";
+                document.getElementById('tagWritableDisplay').className = "font-mono font-semibold text-emerald-400 mt-0.5 block";
+                logEvent('success', `УСПІХ! Нові дані (${currentTlvBytes.length} байтів) записано у пам'ять NFC-картки.`);
+
+            } catch (err) {
+                hideNfcModal();
+                setScanBadge('Помилка запису', 'rose');
+                if (err.name === 'NotAllowedError') {
+                    document.getElementById('tagWritableDisplay').textContent = "Заблокована (Read-Only / PWD)";
+                    document.getElementById('tagWritableDisplay').className = "font-mono font-semibold text-rose-400 mt-0.5 block";
+                    logEvent('error', 'NotAllowedError: Картка захищена паролем (PWD/AUTH0) або заблокована через Lock Bits (Read-Only).');
+                } else if (err.name === 'AbortError') {
+                    logEvent('warn', 'Операцію запису скасовано користувачем.');
+                } else {
+                    logEvent('error', `Помилка запису (${err.name}): ${err.message}`);
+                }
+            }
+        }
+
+        // ============================================================================
+        // MODAL & UI HELPERS
+        // ============================================================================
+        function showNfcModal(title, desc) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalDesc').textContent = desc;
+            document.getElementById('nfcModal').classList.remove('hidden');
+        }
+
+        function hideNfcModal() {
+            document.getElementById('nfcModal').classList.add('hidden');
+        }
+
+        function cancelNfcOperation() {
+            if (activeAbortController) {
+                activeAbortController.abort();
+                activeAbortController = null;
+            }
+            hideNfcModal();
+            setScanBadge('Скасовано', 'slate');
+            logEvent('warn', 'Очікування NFC-картки зупинено.');
+        }
+
+        function setScanBadge(text, color) {
+            const el = document.getElementById('scanStateBadge');
+            el.textContent = text;
+            const map = {
+                emerald: "text-[11px] font-mono px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
+                blue:    "text-[11px] font-mono px-2.5 py-1 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 animate-pulse",
+                rose:    "text-[11px] font-mono px-2.5 py-1 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30",
+                slate:   "text-[11px] font-mono px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700"
+            };
+            el.className = map[color] || map.slate;
+        }
+    </script>
+</body>
+</html>
